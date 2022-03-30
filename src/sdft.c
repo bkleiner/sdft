@@ -2,11 +2,6 @@
 
 #include <math.h>
 
-#define SDFT_FILTER_HZ 4
-
-#define SDFT_DAMPING_FACTOR 0.9999f
-#define SDFT_SUBSAMPLES (SDFT_SAMPLE_PERIOD / LOOPTIME) // should be looptime_autodetect
-
 #define SWAP(x, y)      \
   {                     \
     typeof(x) temp = x; \
@@ -17,8 +12,8 @@
 static float r_to_N;
 static complex_float coeff[SDFT_SAMPLE_SIZE];
 
-static const uint32_t bin_min_index = (float)SDFT_MIN_HZ * (float)SDFT_SAMPLE_SIZE * (SDFT_SAMPLE_PERIOD * 1e-6f) + 0.5f;
-static const uint32_t bin_max_index = (float)SDFT_MAX_HZ * (float)SDFT_SAMPLE_SIZE * (SDFT_SAMPLE_PERIOD * 1e-6f) + 0.5f;
+static const uint32_t bin_min_index = (float)SDFT_MIN_HZ / SDFT_HZ_RESOLUTION + 0.5f;
+static const uint32_t bin_max_index = (float)SDFT_MAX_HZ / SDFT_HZ_RESOLUTION + 0.5f;
 static const uint32_t bin_batches = (bin_max_index - bin_min_index) / SDFT_SUBSAMPLES + 1;
 
 void sdft_init(sdft_t *sdft) {
@@ -52,15 +47,14 @@ void sdft_init(sdft_t *sdft) {
 }
 
 bool sdft_push(sdft_t *sdft, float val) {
-  /*
   bool batch_finished = false;
 
   const uint32_t bin_min = bin_batches * sdft->sample_count;
-  const uint32_t bin_max = min_uint32(bin_min + bin_batches, bin_max_index);
+  const uint32_t bin_max = min_uint32(bin_min + bin_batches, SDFT_BIN_COUNT);
 
   const float delta = sdft->sample_avg - r_to_N * sdft->samples[sdft->idx];
 
-  if (sdft->sample_count == SDFT_SUBSAMPLES) {
+  if (sdft->sample_count >= (uint32_t)SDFT_SUBSAMPLES) {
     sdft->sample_avg = sdft->sample_accumulator / (float)sdft->sample_count;
     sdft->sample_accumulator = 0;
     sdft->sample_count = 0;
@@ -79,18 +73,6 @@ bool sdft_push(sdft_t *sdft, float val) {
   }
 
   return batch_finished;
-  */
-
-  const float delta = val - r_to_N * sdft->samples[sdft->idx];
-
-  sdft->samples[sdft->idx] = val;
-  sdft->idx = (sdft->idx + 1) % SDFT_SAMPLE_SIZE;
-
-  for (uint32_t i = bin_min_index; i < bin_max_index; i++) {
-    sdft->data[i] = coeff[i] * (sdft->data[i] + delta);
-  }
-
-  return true;
 }
 
 bool sdft_update(sdft_t *sdft) {
@@ -196,17 +178,17 @@ bool sdft_update(sdft_t *sdft) {
         meanBin += (y0 - y2) / denom;
       }
 
-      const float f_hz = meanBin / (SDFT_SAMPLE_PERIOD * 1e-6f) / (float)SDFT_SAMPLE_SIZE;
+      const float f_hz = meanBin * SDFT_HZ_RESOLUTION;
 
       const float filter_multi = constrainf(sdft->peak_values[peak] / sdft->noise_floor, 1.0f, 10.0f);
-      const float gain = (LOOPTIME * 1e-6f) / (1 / (2.0f * M_PI_F * (filter_multi * SDFT_FILTER_HZ)) + (LOOPTIME * 1e-6f));
+      const float gain = LOOPTIME_S / (1 / (2.0f * M_PI_F * (filter_multi * SDFT_FILTER_HZ)) + LOOPTIME_S);
 
       sdft->notch_hz[peak] += gain * (f_hz - sdft->notch_hz[peak]);
     }
 
     sdft->state = SDFT_UPDATE_FILTERS;
     break;
-  };
+  }
 
   case SDFT_UPDATE_FILTERS:
     sdft->state = SDFT_UPDATE_MAGNITUE;

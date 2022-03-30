@@ -6,7 +6,8 @@
 
 #define M_PI_F 3.14159265358979323846f
 
-#define LOOPTIME 250
+#define LOOPTIME 500
+#define LOOPTIME_S (LOOPTIME * 1e-6f)
 
 #define FILTERCALC(sampleperiod, filtertime) (1.0f - (6.0f * (float)(sampleperiod)) / (3.0f * (float)(sampleperiod) + (float)(filtertime)))
 
@@ -95,7 +96,7 @@ int main(int argc, char const *argv[]) {
   sdft_init(&sdft);
   FILE *stream = fopen("log3.csv", "r");
 
-  const char *cmd = "gnuplot -e \"set terminal png size 800,600; set output 'output/%05d_%d.png';  set title 'Loop %d'; plot '-' title 'dft' with lines, '-' title 'raw' with impulse, '-' title 'filt' with impulse, '-' title 'bb' with impulse\"";
+  const char *cmd = "gnuplot -e \"set terminal png size 800,600; set output 'output/%05d_%d.png'; set title 'Loop %d'; set xtics 0,50,500; plot '-' title 'dft' with lines, '-' title 'raw' with impulse, '-' title 'filt' with impulse, '-' title 'bb' with impulse\"";
 
   char line[1024];
   uint32_t counter = 0;
@@ -104,7 +105,9 @@ int main(int argc, char const *argv[]) {
       continue;
     }
 
-    sdft_push(&sdft, get_field_float(line, 26) / 1000.f);
+    if (!sdft_push(&sdft, get_field_float(line, 26) / 1000.f)) {
+      continue;
+    }
 
     while (!sdft_update(&sdft))
       ;
@@ -114,13 +117,14 @@ int main(int argc, char const *argv[]) {
     char cmd_buffer[512];
     const int loop = get_field_int(line, 1);
     sprintf(cmd_buffer, cmd, counter, loop, loop);
+    printf("processing %05d %d\n", counter, loop);
 
     FILE *pipe = popen(cmd_buffer, "w");
 
     float max = 0.0f;
 
     for (uint32_t i = 0; i < SDFT_BIN_COUNT; i++) {
-      const float f_hz = i / (SDFT_SAMPLE_PERIOD * 1e-6f) / (float)SDFT_SAMPLE_SIZE;
+      const float f_hz = i * SDFT_HZ_RESOLUTION;
       fprintf(pipe, "%f %f\n", f_hz, sdft.magnitude[i]);
       if (sdft.magnitude[i] > max) {
         max = sdft.magnitude[i];
@@ -129,7 +133,7 @@ int main(int argc, char const *argv[]) {
     fprintf(pipe, "e\n");
 
     for (uint32_t p = 0; p < SDFT_PEAKS; p++) {
-      const float f_hz = sdft.peak_indicies[p] / (SDFT_SAMPLE_PERIOD * 1e-6f) / (float)SDFT_SAMPLE_SIZE;
+      const float f_hz = sdft.peak_indicies[p] * SDFT_HZ_RESOLUTION;
       fprintf(pipe, "%f %f\n", f_hz, sdft.peak_values[p]);
     }
     fprintf(pipe, "e\n");
