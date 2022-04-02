@@ -2,6 +2,10 @@
 
 #include <math.h>
 
+// from https://www.dsprelated.com/showarticle/776.php
+// citing E. Jacobsen and R. Lyons, “The Sliding DFT”
+// and E. Jacobsen and R. Lyons, “An Update to the Sliding DFT”
+
 #define SWAP(x, y)      \
   {                     \
     typeof(x) temp = x; \
@@ -10,7 +14,7 @@
   }
 
 static float r_to_N;
-static complex_float coeff[SDFT_SAMPLE_SIZE];
+static complex_float twiddle[SDFT_SAMPLE_SIZE];
 
 static const uint32_t bin_min_index = (float)SDFT_MIN_HZ / SDFT_HZ_RESOLUTION + 0.5f;
 static const uint32_t bin_max_index = (float)SDFT_MAX_HZ / SDFT_HZ_RESOLUTION + 0.5f;
@@ -19,9 +23,10 @@ static const uint32_t bin_batches = (bin_max_index - bin_min_index) / SDFT_SUBSA
 void sdft_init(sdft_t *sdft) {
   r_to_N = powf(SDFT_DAMPING_FACTOR, SDFT_SAMPLE_SIZE);
 
+  const complex_float j = CMPLXF(0.0f, 1.0f);
   for (uint32_t i = 0; i < SDFT_SAMPLE_SIZE; i++) {
-    const float phi = 2.0f * M_PI_F * (float)i / (float)SDFT_SAMPLE_SIZE;
-    coeff[i] = SDFT_DAMPING_FACTOR * (fastcos(phi) + _Complex_I * fastsin(phi));
+    const float factor = 2.0f * M_PI_F * (float)i / (float)SDFT_SAMPLE_SIZE;
+    twiddle[i] = cexpf(j * factor);
   }
 
   sdft->state = SDFT_UPDATE_MAGNITUE;
@@ -69,7 +74,7 @@ bool sdft_push(sdft_t *sdft, float val) {
   }
 
   for (uint32_t i = bin_min; i < bin_max; i++) {
-    sdft->data[i] = coeff[i] * (sdft->data[i] + delta);
+    sdft->data[i] = twiddle[i] * (SDFT_DAMPING_FACTOR * sdft->data[i] + delta);
   }
 
   return batch_finished;
