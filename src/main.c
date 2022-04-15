@@ -9,8 +9,6 @@
 #define LOOPTIME 500
 #define LOOPTIME_S (LOOPTIME * 1e-6f)
 
-#define FILTERCALC(sampleperiod, filtertime) (1.0f - (6.0f * (float)(sampleperiod)) / (3.0f * (float)(sampleperiod) + (float)(filtertime)))
-
 uint32_t min_uint32(uint32_t a, uint32_t b) {
   if (a < b) {
     return a;
@@ -92,64 +90,93 @@ int get_field_int(const char *line, int num) {
   return val;
 }
 
+static const char *cmd = "gnuplot -e \" "
+                         "set terminal png size 800,600; "
+                         "set output 'output/%05d_%05d.png'; "
+                         "set title 'Loop %05d'; "
+                         "set xtics 0,50,500; "
+                         "plot '-' title 'dft' with lines, '-' title 'raw' with impulse, '-' title 'filt' with impulse, '-' title 'bb' with impulse"
+                         "\"";
+
+void update(int loop, float sample, float peaks[]) {
+  static uint32_t counter = 0;
+
+  if (!sdft_push(&sdft, sample)) {
+    return;
+  }
+
+  while (!sdft_update(&sdft))
+    ;
+
+  counter++;
+
+  char cmd_buffer[512];
+
+  sprintf(cmd_buffer, cmd, counter, loop, loop);
+  printf("processing %05d %05d\n", counter, loop);
+
+  FILE *pipe = popen(cmd_buffer, "w");
+
+  float max = 0.0f;
+
+  for (uint32_t i = 0; i < SDFT_BIN_COUNT; i++) {
+    const float f_hz = i * SDFT_HZ_RESOLUTION;
+    fprintf(pipe, "%f %f\n", f_hz, sdft.magnitude[i]);
+    if (sdft.magnitude[i] > max) {
+      max = sdft.magnitude[i];
+    }
+  }
+  fprintf(pipe, "e\n");
+
+  for (uint32_t p = 0; p < SDFT_PEAKS; p++) {
+    const float f_hz = sdft.peak_indicies[p] * SDFT_HZ_RESOLUTION;
+    fprintf(pipe, "%f %f\n", f_hz, sdft.peak_values[p]);
+  }
+  fprintf(pipe, "e\n");
+
+  for (uint32_t p = 0; p < SDFT_PEAKS; p++) {
+    fprintf(pipe, "%f %f\n", sdft.notch_hz[p], max);
+  }
+  fprintf(pipe, "e\n");
+
+  for (uint32_t p = 0; p < SDFT_PEAKS; p++) {
+    fprintf(pipe, "%f %f\n", peaks[p], max);
+  }
+  fprintf(pipe, "e\n");
+
+  pclose(pipe);
+}
+
 int main(int argc, char const *argv[]) {
   sdft_init(&sdft);
-  FILE *stream = fopen("log3.csv", "r");
 
-  const char *cmd = "gnuplot -e \"set terminal png size 800,600; set output 'output/%05d_%d.png'; set title 'Loop %d'; set xtics 0,50,500; plot '-' title 'dft' with lines, '-' title 'raw' with impulse, '-' title 'filt' with impulse, '-' title 'bb' with impulse\"";
-
+  /*
   char line[1024];
-  uint32_t counter = 0;
+  FILE *stream = fopen("log3.csv", "r");
   while (fgets(line, 1024, stream)) {
     if (line[0] == '"') {
       continue;
     }
 
-    if (!sdft_push(&sdft, get_field_float(line, 26) / 1000.f)) {
-      continue;
-    }
+    int loop = get_field_int(line, 1);
+    float sample = get_field_float(line, 26) / 1000.f;
 
-    while (!sdft_update(&sdft))
-      ;
-
-    counter++;
-
-    char cmd_buffer[512];
-    const int loop = get_field_int(line, 1);
-    sprintf(cmd_buffer, cmd, counter, loop, loop);
-    printf("processing %05d %d\n", counter, loop);
-
-    FILE *pipe = popen(cmd_buffer, "w");
-
-    float max = 0.0f;
-
-    for (uint32_t i = 0; i < SDFT_BIN_COUNT; i++) {
-      const float f_hz = i * SDFT_HZ_RESOLUTION;
-      fprintf(pipe, "%f %f\n", f_hz, sdft.magnitude[i]);
-      if (sdft.magnitude[i] > max) {
-        max = sdft.magnitude[i];
-      }
-    }
-    fprintf(pipe, "e\n");
-
+    float peaks[SDFT_PEAKS];
     for (uint32_t p = 0; p < SDFT_PEAKS; p++) {
-      const float f_hz = sdft.peak_indicies[p] * SDFT_HZ_RESOLUTION;
-      fprintf(pipe, "%f %f\n", f_hz, sdft.peak_values[p]);
+      peaks[p] = get_field_float(line, 37 + p);
     }
-    fprintf(pipe, "e\n");
 
-    for (uint32_t p = 0; p < SDFT_PEAKS; p++) {
-      fprintf(pipe, "%f %f\n", sdft.notch_hz[p], max);
-    }
-    fprintf(pipe, "e\n");
+    update(loop, sample, peaks);
+  }
+  */
 
-    for (uint32_t p = 0; p < SDFT_PEAKS; p++) {
-      const float val = get_field_float(line, 37 + p);
-      fprintf(pipe, "%f %f\n", val, max);
-    }
-    fprintf(pipe, "e\n");
+  const float phase_increment = 2.0f * M_PI_F * (1.0f / SDFT_SAMPLE_HZ);
 
-    pclose(pipe);
+  for (uint32_t i = 0; i < 100000; i++) {
+    float sample = sinf(150.f * (float)(i)*phase_increment) + 2.0f * sinf(220.f * (float)(i)*phase_increment);
+    float peaks[SDFT_PEAKS] = {0, 0, 0};
+
+    update(i, sample, peaks);
   }
 
   return 0;
