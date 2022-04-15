@@ -12,7 +12,7 @@
 #define SDFT_FILTER_HZ 4
 
 #define SDFT_MIN_HZ 100
-#define SDFT_MAX_HZ 600
+#define SDFT_MAX_HZ 500
 
 #define SDFT_SAMPLE_SIZE 500
 #define SDFT_BIN_COUNT (SDFT_SAMPLE_SIZE / 2)
