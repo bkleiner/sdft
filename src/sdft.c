@@ -55,6 +55,17 @@ void sdft_init(sdft_t *sdft) {
   }
 }
 
+static int32_t sdft_shift_index(int32_t idx, int32_t delta) {
+  int32_t index = idx + delta;
+  if (index < 0) {
+    index = SDFT_SAMPLE_SIZE + index;
+  }
+  if (index >= SDFT_SAMPLE_SIZE) {
+    index = index - SDFT_SAMPLE_SIZE;
+  }
+  return index;
+}
+
 bool sdft_push(sdft_t *sdft, float val) {
   bool batch_finished = false;
 
@@ -62,8 +73,7 @@ bool sdft_push(sdft_t *sdft, float val) {
   const uint32_t bin_max = min_uint32(bin_min + bin_batches, SDFT_BIN_COUNT);
 
   const float last_sample = sdft->samples[sdft->idx];
-  const float last_sample1 = sdft->samples[(sdft->idx - 1) % SDFT_SAMPLE_SIZE];
-
+  const float last_sample1 = sdft->samples[sdft_shift_index(sdft->idx, -1)];
   sdft->sample_accumulator += val;
   sdft->sample_count++;
 
