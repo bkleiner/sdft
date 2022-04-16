@@ -150,7 +150,7 @@ void update(int loop, float sample, float peaks[]) {
 int main(int argc, char const *argv[]) {
   sdft_init(&sdft);
 
-  /*
+#if 0
   char line[1024];
   FILE *stream = fopen("log3.csv", "r");
   while (fgets(line, 1024, stream)) {
@@ -168,16 +168,16 @@ int main(int argc, char const *argv[]) {
 
     update(loop, sample, peaks);
   }
-  */
-
+#else
   const float phase_increment = 2.0f * M_PI_F * (1.0f / SDFT_SAMPLE_HZ);
 
   for (uint32_t i = 0; i < 100000; i++) {
-    float sample = sinf(150.f * (float)(i)*phase_increment) + 2.0f * sinf(220.f * (float)(i)*phase_increment);
+    float sample = sinf(400.f * (float)(i)*phase_increment) + 2.0f * sinf(220.f * (float)(i)*phase_increment);
     float peaks[SDFT_PEAKS] = {0, 0, 0};
 
     update(i, sample, peaks);
   }
+#endif
 
   return 0;
 }
