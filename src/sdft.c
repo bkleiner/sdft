@@ -23,7 +23,7 @@ static const uint32_t bin_batches = (bin_max_index - bin_min_index) / SDFT_SUBSA
 void sdft_init(sdft_t *sdft) {
   r_to_N = powf(SDFT_DAMPING_FACTOR, SDFT_SAMPLE_SIZE);
 
-  const complex_float j = CMPLXF(0.0f, 1.0f);
+  const complex_float j = 0.0f + _Complex_I * 1.0f;
   for (uint32_t i = 0; i < SDFT_SAMPLE_SIZE; i++) {
     const float factor = 2.0f * M_PI_F * (float)i / (float)SDFT_SAMPLE_SIZE;
     twiddle[i] = cexpf(j * factor);
@@ -175,12 +175,12 @@ bool sdft_update(sdft_t *sdft) {
       }
 
       const float y0 = sdft->magnitude[sdft->peak_indicies[peak] - 1];
-      const float y1 = sdft->magnitude[sdft->peak_indicies[peak]];
-      const float y2 = sdft->magnitude[sdft->peak_indicies[peak] + 1];
+      const float y1 = 1.75f * sdft->magnitude[sdft->peak_indicies[peak]];
+      const float y2 = 1.25f * sdft->magnitude[sdft->peak_indicies[peak] + 1];
 
       // Estimate true peak position aka. meanBin (fit parabola y(x) over y0, y1 and y2, solve dy/dx=0 for x)
       float meanBin = sdft->peak_indicies[peak];
-      const float denom = 2.0f * (y0 - 2 * y1 + y2);
+      const float denom = 2.0f * (y0 - y1 + y2);
       if (denom != 0.0f) {
         meanBin += (y0 - y2) / denom;
       }
